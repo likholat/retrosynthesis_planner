@@ -36,3 +36,9 @@ jobs:
     - name: (Test Unpool) default parameters
       run: |
         source /opt/intel/openvino/bin/setupvars.sh
+
+    - name: Setup conda
+        uses: s-weigand/setup-conda@v1
+        with:
+          update-conda: true
+    - run: conda --version
