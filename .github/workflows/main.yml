@@ -38,5 +38,4 @@ jobs:
       run: |
         source /opt/intel/openvino/bin/setupvars.sh
 
-    - name: Setup conda
-        run: conda --version
+    - run: conda --version
