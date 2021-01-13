@@ -24,7 +24,6 @@ jobs:
       run: |
         sudo apt-get install -y python3-setuptools
         python3 -m pip install --upgrade pip
-        python3 -m pip install -r requirements.txt --quiet
     - name: Install Intel OpenVINO
       run: |
         sudo curl -o GPG-PUB-KEY-INTEL-OPENVINO-2021 https://apt.repos.intel.com/openvino/2021/GPG-PUB-KEY-INTEL-OPENVINO-2021
