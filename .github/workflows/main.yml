@@ -41,4 +41,4 @@ jobs:
         uses: s-weigand/setup-conda@v1
         with:
           update-conda: true
-    - run: conda --version
+        run: conda --version
