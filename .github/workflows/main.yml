@@ -1,0 +1,35 @@
+name: CI
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-18.04
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get install -y python3-setuptools
+        python3 -m pip install --upgrade pip
+        python3 -m pip install -r requirements.txt --quiet
+    - name: Install Intel OpenVINO
+      run: |
+        sudo curl -o GPG-PUB-KEY-INTEL-OPENVINO-2021 https://apt.repos.intel.com/openvino/2021/GPG-PUB-KEY-INTEL-OPENVINO-2021
+        sudo apt-key add GPG-PUB-KEY-INTEL-OPENVINO-2021
+        sudo echo "deb https://apt.repos.intel.com/openvino/2021 all main" | sudo tee - a /etc/apt/sources.list.d/intel-openvino-2021.list
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends intel-openvino-dev-ubuntu18-2021.1.110
+        sudo ln -s /opt/intel/openvino_2021 /opt/intel/openvino
