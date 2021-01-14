@@ -19,12 +19,22 @@ jobs:
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.8
     - uses: s-weigand/setup-conda@v1
+      with:
+        activate-conda: false
+    - run: conda --version
+    - run: which python
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get install -y python3-setuptools
-        python3 -m pip install --upgrade pip
+    # - uses: s-weigand/setup-conda@v1
+
+    # - name: Install dependencies
+    #   run: |
+    #     sudo apt-get install -y python3-setuptools
+    #     python3 -m pip install --upgrade pip
     - name: Install Intel OpenVINO
       run: |
         sudo curl -o GPG-PUB-KEY-INTEL-OPENVINO-2021 https://apt.repos.intel.com/openvino/2021/GPG-PUB-KEY-INTEL-OPENVINO-2021
