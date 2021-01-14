@@ -29,6 +29,8 @@ jobs:
     - run: conda --version
     - run: which python
 
+    - run: conda install -c rdkit rdkit=2018.09.1
+
     # - uses: s-weigand/setup-conda@v1
 
     # - name: Install dependencies
