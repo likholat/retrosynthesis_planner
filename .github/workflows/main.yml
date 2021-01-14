@@ -24,9 +24,9 @@ jobs:
     #   with:
     #     python-version: 3.6
     - uses: s-weigand/setup-conda@v1
-      with:
-        activate-conda: false
-    - run: conda --version
+      # with:
+      #   activate-conda: false
+    # - run: conda --version
     # - run: which python
     - run: conda install python=3.6
     - run: conda install -c rdkit rdkit=2018.09.1
