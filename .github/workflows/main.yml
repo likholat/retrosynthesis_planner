@@ -28,7 +28,7 @@ jobs:
       #   activate-conda: false
     # - run: conda --version
     # - run: which python
-    - run: conda install python=3.6
+    # - run: conda install python=3.6
     - run: |
         chmod +x download.sh
         ./download.sh
