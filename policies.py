@@ -263,6 +263,7 @@ if __name__ == '__main__':
         if any(r in expansion_rules for r in rules):
             prods.append(prod)
     # prods = random.sample(prods, 200000)
+
     with Pool() as p:
         _, _, var = reduce(reducefn, tqdm(p.imap(mapfn, chunker(prods, chunk_size)), total=len(prods)//chunk_size))
     idx = np.where(var > 0)[0]
@@ -318,8 +319,10 @@ if __name__ == '__main__':
             id = expansion_rules[r]
             y.append(id)
             X.append(prod)
+
+    # X = X[:100]
     print('Training size:', len(X))
-    train(sess, expansion, X, y, batch_size=1024, epochs=2000)
+    train(sess, expansion, X, y, batch_size=1024, epochs=1)
     saver.save(sess, ckpt_path)
 
     # print('In-Scope Filter training...')
