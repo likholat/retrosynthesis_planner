@@ -19,7 +19,7 @@ jobs:
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
-    - uses: s-weigand/setup-conda@v1
+    # - uses: s-weigand/setup-conda@v1
 
     - name: Install dependencies
       run: |
@@ -38,4 +38,4 @@ jobs:
       run: |
         source /opt/intel/openvino/bin/setupvars.sh
 
-    - run: conda --version
+    # - run: conda --version
