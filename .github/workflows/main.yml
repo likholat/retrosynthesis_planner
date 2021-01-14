@@ -28,11 +28,12 @@ jobs:
       #   activate-conda: false
     # - run: conda --version
     # - run: which python
-    # - run: conda install python=3.6
+    - run: conda install python=3.6
     - run: |
         chmod +x download.sh
         ./download.sh
     - run: conda install -c rdkit rdkit=2018.09.1
+    - run: pyton extract_templates.py
 
     # - uses: s-weigand/setup-conda@v1
 
