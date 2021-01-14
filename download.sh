@@ -11,8 +11,10 @@ tail -n +2 2001_Sep2016_USPTOapplications_smiles.rsmi | cut -f1 >> reactions.rsm
 echo $(cat reactions.rsmi | wc -l) reactions
 
 # eMolecules data for commercially available molecules
-wget http://downloads.emolecules.com/free/2018-11-01/version.smi.gz -O emolecules_plus.smi.gz
-wget http://downloads.emolecules.com/orderbb/2018-11-01/version.smi.gz -O emolecules_orderbb.smi.gz
+# wget http://downloads.emolecules.com/free/2018-11-01/version.smi.gz -O emolecules_plus.smi.gz
+# wget http://downloads.emolecules.com/orderbb/2018-11-01/version.smi.gz -O emolecules_orderbb.smi.gz
+wget http://downloads.emolecules.com/free/2020-11-01/version.smi.gz -O emolecules_plus.smi.gz
+wget http://downloads.emolecules.com/orderbb/2020-11-01/version.smi.gz -O emolecules_orderbb.smi.gz
 gunzip *.gz
 tail -n +2 emolecules_orderbb.smi | cut -d' ' -f1 >> emolecules.smi
 tail -n +2 emolecules_plus.smi | cut -d' ' -f1 >> emolecules.smi
