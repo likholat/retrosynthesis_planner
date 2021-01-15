@@ -86,11 +86,15 @@ def expansion(node):
     # fprs = policies.fingerprint_mols(mols)
     fprs = policies.fingerprint_mols(mols, 1024)
 
-    print('!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    import sys
-    tf.print(sess.graph, output_stream=sys.stdout)
-    print(sess.graph)
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    for node in sess.graph_def.node:
+        if node.op == 'Placeholder':
+            print(node)
 
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    print(expansion_net.keep_prob)
+    print(expansion_net.X)
+    print(expansion_net.k)
 
     # Predict applicable rules
     preds = sess.run(expansion_net.pred, feed_dict={

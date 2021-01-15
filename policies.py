@@ -126,7 +126,7 @@ class RolloutPolicyNet:
 
 
 class ExpansionPolicyNet:
-    def __init__(self, n_rules, fp_dim=1e4, kp=None):
+    def __init__(self, n_rules, fp_dim=1e4):
         self.fp_dim = fp_dim
         self.n_rules = n_rules
 
@@ -134,18 +134,18 @@ class ExpansionPolicyNet:
         self.y = tf.placeholder(tf.int64, shape=(None,))
         self.k = tf.placeholder(tf.int32, shape=())
 
-        self.keep_prob = kp if kp else keep_prob
+        self.keep_prob = keep_prob
 
         # inp = self.X
         inp = tf.math.log(self.X+1)
         net = tf.layers.dense(inp, 512, activation=tf.nn.elu)
-        # net = tf.nn.dropout(net, keep_prob=keep_prob)
-        net = tf.nn.dropout(net, keep_prob=self.keep_prob)
+        net = tf.nn.dropout(net, keep_prob=keep_prob)
+        # net = tf.nn.dropout(net, keep_prob=self.keep_prob)
 
         for _ in range(5):
             net = highway_layer(net, activation=tf.nn.elu)
-            # net = tf.nn.dropout(net, keep_prob=keep_prob)
-            net = tf.nn.dropout(net, keep_prob=self.keep_prob)
+            net = tf.nn.dropout(net, keep_prob=keep_prob)
+            # net = tf.nn.dropout(net, keep_prob=self.keep_prob)
 
         net = tf.layers.dense(net, n_rules, activation=None)
         pred = tf.nn.softmax(net)
