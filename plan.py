@@ -10,11 +10,17 @@ from rdkit.Chem import AllChem
 
 # Load base compounds
 starting_mols = set()
-with open('data/emolecules.smi', 'r') as f:
+with open('data_2021/emolecules.smi', 'r') as f:
     for line in tqdm(f, desc='Loading base compounds'):
-        smi = line.strip()
-        smi = molvs.standardize_smiles(smi)
-        starting_mols.add(smi)
+        try:
+            smi = line.strip()
+            smi = molvs.standardize_smiles(smi)
+            starting_mols.add(smi)
+
+            if len(starting_mols) == 10:
+                break
+        except Exception as e:
+            print('WARNING', e)
 print('Base compounds:', len(starting_mols))
 
 # Load policy networks
@@ -22,6 +28,28 @@ with open('model/rules.json', 'r') as f:
     rules = json.load(f)
     rollout_rules = rules['rollout']
     expansion_rules = rules['expansion']
+
+# rollout_rules = {}
+# with open('data/rollout.dat', 'r') as f:
+#     for i, l in tqdm(enumerate(f), desc='rollout'):
+#         rule = l.strip()
+#         rollout_rules[rule] = i
+
+# # dict_pairs = rollout_rules.items()
+# # pairs_iterator = iter(dict_pairs)
+# # first_pair = next(pairs_iterator)
+# # print(first_pair)
+
+# expansion_rules = {}
+# with open('data/expansion.dat', 'r') as f:
+#     for i, l in tqdm(enumerate(f), desc='expansion'):
+#         rule = l.strip()
+#         expansion_rules[rule] = i
+
+# dict_pairs = expansion_rules.items()
+# pairs_iterator = iter(dict_pairs)
+# first_pair = next(pairs_iterator)
+# print(first_pair)
 
 rollout_net = policies.RolloutPolicyNet(n_rules=len(rollout_rules))
 expansion_net = policies.ExpansionPolicyNet(n_rules=len(expansion_rules))
@@ -55,10 +83,17 @@ def expansion(node):
     # Convert mols to format for prediction
     # If the mol is in the starting set, ignore
     mols = [mol for mol in mols if mol not in starting_mols]
-    fprs = policies.fingerprint_mols(mols)
+    # fprs = policies.fingerprint_mols(mols)
+    fprs = policies.fingerprint_mols(mols, 1024)
+
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    import sys
+    tf.print(sess.graph, output_stream=sys.stdout)
+    print(sess.graph)
+
 
     # Predict applicable rules
-    preds = sess.run(expansion_net.pred_op, feed_dict={
+    preds = sess.run(expansion_net.pred, feed_dict={
         expansion_net.keep_prob: 1.,
         expansion_net.X: fprs,
         expansion_net.k: 5
@@ -103,7 +138,7 @@ def rollout(node, max_depth=200):
         fprs = policies.fingerprint_mols([mol])
 
         # Predict applicable rules
-        preds = sess.run(rollout_net.pred_op, feed_dict={
+        preds = sess.run(rollout_net.pred, feed_dict={
             expansion_net.keep_prob: 1.,
             expansion_net.X: fprs,
             expansion_net.k: 1
