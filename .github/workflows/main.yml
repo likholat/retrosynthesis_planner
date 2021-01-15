@@ -38,6 +38,8 @@ jobs:
         rm *.{7z,zip}
         tail -n +2 1976_Sep2016_USPTOgrants_smiles.rsmi | cut -f1 >> reactions.rsmi
         tail -n +2 2001_Sep2016_USPTOapplications_smiles.rsmi | cut -f1 >> reactions.rsmi
+        wget http://downloads.emolecules.com/free/2020-11-01/version.smi.gz -O emolecules_plus.smi.gz
+        wget http://downloads.emolecules.com/orderbb/2020-11-01/version.smi.gz -O emolecules_orderbb.smi.gz
     - run: conda install -c rdkit rdkit=2018.09.1
     # - run: python extract_templates.py
 
