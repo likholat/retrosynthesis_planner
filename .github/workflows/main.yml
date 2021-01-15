@@ -33,7 +33,7 @@ jobs:
         chmod +x download.sh
         ./download.sh
     - run: conda install -c rdkit rdkit=2018.09.1
-    - run: pyton extract_templates.py
+    - run: python extract_templates.py
 
     # - uses: s-weigand/setup-conda@v1
 
