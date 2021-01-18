@@ -44,7 +44,7 @@ jobs:
         tail -n +2 emolecules_orderbb.smi | cut -d' ' -f1 >> emolecules.smi
         tail -n +2 emolecules_plus.smi | cut -d' ' -f1 >> emolecules.smi
     - run: conda install -c rdkit rdkit=2018.09.1
-    # - run: python extract_templates.py
+    - run: python extract_templates.py
 
     # - uses: s-weigand/setup-conda@v1
 

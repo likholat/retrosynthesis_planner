@@ -272,17 +272,12 @@ def clean(line): return line.strip().split()[0]
 
 transforms = []
 with open('data/reactions.rsmi', 'r') as f:
-    p = Pool()
-    # with Pool() as p:
-    imap = p.imap(extract, map(clean, f))
-    tqdm = tqdm(imap)
-    for res in tqdm:
-        print('1')
-        if res is None: continue
-        rxn, product = res
-        transforms.append((rxn, product))
+    with Pool() as p:
+        for res in tqdm(p.imap(extract, map(clean, f))):
+            if res is None: continue
+            rxn, product = res
+            transforms.append((rxn, product))
 
-print('3')
 with open('data/templates.dat', 'w') as f:
     f.write('\n'.join(['\t'.join(rxn_prod) for rxn_prod in transforms]))
 
@@ -300,3 +295,4 @@ rollout = [rule for rule, count in templates.items() if count >= 15]
 print('Rollout rules:', len(rollout))
 with open('data/rollout.dat', 'w') as f:
     f.write('\n'.join(rollout))
+    
