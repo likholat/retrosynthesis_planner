@@ -104,10 +104,11 @@ class RolloutPolicyNet:
         self.n_rules = n_rules
         self.X = tf.placeholder(tf.float32, shape=(None, fp_dim), name='X')
         self.y = tf.placeholder(tf.int64, shape=(None,), name='y')
+        self.keep_prob = keep_prob
 
         inp = tf.math.log(self.X+1)
         net = tf.layers.dense(inp, 512, activation=tf.nn.elu)
-        net = tf.nn.dropout(net, keep_prob=keep_prob)
+        # net = tf.nn.dropout(net, keep_prob=keep_prob)
         net = tf.layers.dense(net, n_rules, activation=None)
         self.pred_op = tf.argmax(tf.nn.softmax(net), 1)
         self.loss_op = tf.losses.sparse_softmax_cross_entropy(self.y, net)
@@ -133,14 +134,15 @@ class ExpansionPolicyNet:
         self.X = tf.placeholder(tf.float32, shape=(None, fp_dim))
         self.y = tf.placeholder(tf.int64, shape=(None,))
         self.k = tf.placeholder(tf.int32, shape=())
+        self.keep_prob = keep_prob
 
         # inp = self.X
         inp = tf.math.log(self.X+1)
         net = tf.layers.dense(inp, 512, activation=tf.nn.elu)
-        net = tf.nn.dropout(net, keep_prob=keep_prob)
+        # net = tf.nn.dropout(net, keep_prob=keep_prob)
         for _ in range(5):
             net = highway_layer(net, activation=tf.nn.elu)
-            net = tf.nn.dropout(net, keep_prob=keep_prob)
+            # net = tf.nn.dropout(net, keep_prob=keep_prob)
 
         net = tf.layers.dense(net, n_rules, activation=None)
         pred = tf.nn.softmax(net)
@@ -173,7 +175,7 @@ class InScopeFilterNet:
         # Product branch
         prod_inp = tf.math.log(self.X_prod+1)
         prod_net = tf.layers.dense(prod_inp, 1024, activation=tf.nn.elu)
-        prod_net = tf.nn.dropout(prod_net, keep_prob=keep_prob)
+        # prod_net = tf.nn.dropout(prod_net, keep_prob=keep_prob)
         for _ in range(5):
             prod_net = highway_layer(prod_net, activation=tf.nn.elu)
 

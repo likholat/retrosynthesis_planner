@@ -8,13 +8,26 @@ import tensorflow as tf
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+import numpy as np
+import argparse
+
+parser = argparse.ArgumentParser("Select model representation")
+parser.add_argument("--use_openvino", help="Enable OpenVINO optimization", action='store_true')
+args = parser.parse_args()
+
 # Load base compounds
 starting_mols = set()
 with open('data/emolecules.smi', 'r') as f:
     for line in tqdm(f, desc='Loading base compounds'):
-        smi = line.strip()
-        smi = molvs.standardize_smiles(smi)
-        starting_mols.add(smi)
+        try:
+            smi = line.strip()
+            smi = molvs.standardize_smiles(smi)
+            starting_mols.add(smi)
+
+            if len(starting_mols) == 10:
+                break
+        except Exception as e:
+            print('WARNING', e)
 print('Base compounds:', len(starting_mols))
 
 # Load policy networks
@@ -33,6 +46,50 @@ sess.run(init)
 saver = tf.train.Saver()
 saver.restore(sess, 'model/model.ckpt')
 
+if args.use_openvino:
+    import subprocess
+    import sys
+    import mo_tf
+    import os
+
+    from openvino.inference_engine import IECore
+
+    # Save frozen graph
+    pb_model_path = 'model.pb'
+    output_node_names = ['TopKV2']
+    input_node_name = ['Placeholder', 'Placeholder_2']
+    graph_def = tf.graph_util.convert_variables_to_constants(
+            sess,
+            sess.graph_def,
+            output_node_names)
+
+    from tensorflow.python.tools import optimize_for_inference_lib
+    graph_def = optimize_for_inference_lib.optimize_for_inference(
+            graph_def, input_node_name, output_node_names, tf.float32.as_datatype_enum)
+
+    with tf.io.gfile.GFile(pb_model_path, 'wb') as f:
+        f.write(graph_def.SerializeToString())
+
+    # Convert to OpenVINO IR
+    subprocess.run(
+        [
+            sys.executable, mo_tf.__file__, '--input_model', pb_model_path,
+            '--input', 'Placeholder,Placeholder_2', '--input_shape', "[1, 10000],[1]",
+            '--freeze_placeholder_with_value', "Placeholder_2->5"
+        ],
+        check=True)
+
+    model_xml = 'model.xml'
+    model_bin = 'model.bin'
+
+    ie = IECore()
+    net = ie.read_network(model=model_xml, weights=model_bin)
+    exec_net = ie.load_network(network=net, device_name='CPU')
+
+    os.remove(pb_model_path)
+    os.remove(model_xml)
+    os.remove(model_bin)
+
 
 def transform(mol, rule):
     """Apply transformation rule to a molecule to get reactants"""
@@ -40,7 +97,7 @@ def transform(mol, rule):
     results = rxn.RunReactants([mol])
 
     # Only look at first set of results (TODO any reason not to?)
-    results = results[0]
+    # results = results[0]
     reactants = [Chem.MolToSmiles(smi) for smi in results]
     return reactants
 
@@ -55,26 +112,49 @@ def expansion(node):
     # Convert mols to format for prediction
     # If the mol is in the starting set, ignore
     mols = [mol for mol in mols if mol not in starting_mols]
-    fprs = policies.fingerprint_mols(mols)
+    fprs = policies.fingerprint_mols(mols, expansion_net.X.shape[1])
 
-    # Predict applicable rules
-    preds = sess.run(expansion_net.pred_op, feed_dict={
-        expansion_net.keep_prob: 1.,
-        expansion_net.X: fprs,
-        expansion_net.k: 5
-    })
+    if not args.use_openvino:
+        # Predict applicable rules
+        preds = sess.run(expansion_net.pred, feed_dict={
+            expansion_net.keep_prob: 1.,
+            expansion_net.X: fprs,
+            expansion_net.k: 5
+        })
 
+        indices = preds.indices[0]
+        values = preds.values[0]
+        np.save('expansion_preds_tf.npy', [indices, values])
+
+    else:
+        # Get output nodes names
+        input_blob = expansion_net.X.name.split(':')[0]
+        values_blob = list(iter(net.outputs))[0]
+        indices_blob = list(iter(net.outputs))[1]
+
+        # Predict applicable rules
+        preds = exec_net.infer(inputs={input_blob: fprs})
+
+        indices = preds[indices_blob][0]
+        values = preds[values_blob][0]
+        np.save('expansion_preds_ov.npy', [indices, values])
+
+    exit()
     # Generate children for reactants
     children = []
-    for mol, rule_idxs in zip(mols, preds):
+    for mol, rule_idxs in zip(mols, preds.indices):
         # State for children will
         # not include this mol
-        new_state = mols - {mol}
+
+        # new_state = mols - [mol]
+        smol = set(mol)
+        new_state = [x for x in mols if x in smol]
 
         mol = Chem.MolFromSmiles(mol)
         for idx in rule_idxs:
             # Extract actual rule
-            rule = expansion_rules[idx]
+
+            rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(idx)]
 
             # TODO filter_net should check if the reaction will work?
             # should do as a batch
@@ -100,38 +180,47 @@ def rollout(node, max_depth=200):
         # Select a random mol (that's not a starting mol)
         mols = [mol for mol in cur.state if mol not in starting_mols]
         mol = random.choice(mols)
-        fprs = policies.fingerprint_mols([mol])
+        fprs = policies.fingerprint_mols([mol], rollout_net.X.shape[1])
 
         # Predict applicable rules
         preds = sess.run(rollout_net.pred_op, feed_dict={
-            expansion_net.keep_prob: 1.,
-            expansion_net.X: fprs,
-            expansion_net.k: 1
+            rollout_net.keep_prob: 1.,
+            rollout_net.X: fprs,
+            # rollout_net.k: 1
         })
 
-        rule = rollout_rules[preds[0][0]]
-        reactants = transform(Chem.MolFromSmiles(mol), rule)
-        state = cur.state | set(reactants)
+        # input_blob = next(iter(net.inputs))
+        # out_blob = next(iter(net.outputs))
 
-        # State for children will
-        # not include this mol
-        state = state - {mol}
+        # opvn_preds = exec_net.infer(inputs={input_blob: fprs})
+        # opvn_preds = opvn_preds[out_blob]
 
-        terminal = all(mol in starting_mols for mol in state)
-        cur = Node(state=state, is_terminal=terminal, parent=cur, action=rule)
+        # np.savetxt('rollout_preds_tf.cvs', preds, delimiter=' ')
+        # np.savetxt('rollout_preds_ov.cvs', opvn_preds, delimiter=' ')
 
-    # Max depth exceeded
-    else:
-        print('Rollout reached max depth')
+    #     rule = rollout_rules[preds[0][0]]
+    #     reactants = transform(Chem.MolFromSmiles(mol), rule)
+    #     state = cur.state | set(reactants)
 
-        # Partial reward if some starting molecules are found
-        reward = sum(1 for mol in cur.state if mol in starting_mols)/len(cur.state)
+    #     # State for children will
+    #     # not include this mol
+    #     state = state - {mol}
 
-        # Reward of -1 if no starting molecules are found
-        if reward == 0:
-            return -1.
+    #     terminal = all(mol in starting_mols for mol in state)
+    #     cur = Node(state=state, is_terminal=terminal, parent=cur, action=rule)
 
-        return reward
+    # # Max depth exceeded
+    # else:
+    #     print('Rollout reached max depth')
+
+    #     # Partial reward if some starting molecules are found
+    #     reward = sum(1 for mol in cur.state if mol in starting_mols)/len(cur.state)
+
+    #     # Reward of -1 if no starting molecules are found
+    #     if reward == 0:
+    #         return -1.
+
+    #     return reward
 
     # Reward of 1 if solution is found
     return 1.
