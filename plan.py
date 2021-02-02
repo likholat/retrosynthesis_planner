@@ -53,11 +53,22 @@ if args.use_openvino:
     import os
 
     from openvino.inference_engine import IECore
+    ie = IECore()
 
-    # Save frozen graph
+    # Get input nodes names
+    exp_inp_node_x_name = expansion_net.X.name.split(':')[0]
+    exp_inp_node_k_name = expansion_net.k.name.split(':')[0]
+    roll_inp_node_name = rollout_net.X.name.split(':')[0]
+
     pb_model_path = 'model.pb'
+    model_xml = 'model.xml'
+    model_bin = 'model.bin'
+
+    # EXPANSION_NET:
+    # Save frozen graph
+    input_node_names = [exp_inp_node_x_name, exp_inp_node_k_name]
     output_node_names = ['TopKV2']
-    input_node_name = ['Placeholder', 'Placeholder_2']
+
     graph_def = tf.graph_util.convert_variables_to_constants(
             sess,
             sess.graph_def,
@@ -65,7 +76,7 @@ if args.use_openvino:
 
     from tensorflow.python.tools import optimize_for_inference_lib
     graph_def = optimize_for_inference_lib.optimize_for_inference(
-            graph_def, input_node_name, output_node_names, tf.float32.as_datatype_enum)
+            graph_def, input_node_names, output_node_names, tf.float32.as_datatype_enum)
 
     with tf.io.gfile.GFile(pb_model_path, 'wb') as f:
         f.write(graph_def.SerializeToString())
@@ -74,17 +85,46 @@ if args.use_openvino:
     subprocess.run(
         [
             sys.executable, mo_tf.__file__, '--input_model', pb_model_path,
-            '--input', 'Placeholder,Placeholder_2', '--input_shape', "[1, 10000],[1]",
+            '--input', ','.join(input_node_names), '--input_shape', "[1, 10000],[1]",
             '--freeze_placeholder_with_value', "Placeholder_2->5"
         ],
         check=True)
 
-    model_xml = 'model.xml'
-    model_bin = 'model.bin'
+    exp_net = ie.read_network(model=model_xml, weights=model_bin)
+    exp_exec_net = ie.load_network(network=exp_net, device_name='CPU')
 
-    ie = IECore()
-    net = ie.read_network(model=model_xml, weights=model_bin)
-    exec_net = ie.load_network(network=net, device_name='CPU')
+    os.remove(pb_model_path)
+    os.remove(model_xml)
+    os.remove(model_bin)
+
+
+    #ROLLOUT_NET:
+    # Save frozen graph
+    input_node_names = [roll_inp_node_name]
+    output_node_names = ['ArgMax']
+    
+    graph_def = tf.graph_util.convert_variables_to_constants(
+            sess,
+            sess.graph_def,
+            output_node_names)
+
+    from tensorflow.python.tools import optimize_for_inference_lib
+    graph_def = optimize_for_inference_lib.optimize_for_inference(
+            graph_def, input_node_names, output_node_names, tf.float32.as_datatype_enum)
+
+    with tf.io.gfile.GFile(pb_model_path, 'wb') as f:
+        f.write(graph_def.SerializeToString())
+
+    # Convert to OpenVINO IR
+    subprocess.run(
+        [
+            sys.executable, mo_tf.__file__, '--input_model', pb_model_path,
+            '--input', ','.join(input_node_names), '--input_shape', "[1, 8912]",
+        ],
+        check=True)
+
+    roll_net = ie.read_network(model=model_xml, weights=model_bin)
+    roll_exec_net = ie.load_network(network=roll_net, device_name='CPU')
 
     os.remove(pb_model_path)
     os.remove(model_xml)
@@ -124,50 +164,49 @@ def expansion(node):
 
         indices = preds.indices[0]
         values = preds.values[0]
-        np.save('expansion_preds_tf.npy', [indices, values])
+        np.save('expansion_preds_tf', [indices, values])
 
     else:
         # Get output nodes names
-        input_blob = expansion_net.X.name.split(':')[0]
-        values_blob = list(iter(net.outputs))[0]
-        indices_blob = list(iter(net.outputs))[1]
+        values_blob = list(iter(exp_net.outputs))[0]
+        indices_blob = list(iter(exp_net.outputs))[1]
 
         # Predict applicable rules
-        preds = exec_net.infer(inputs={input_blob: fprs})
+        preds = exp_exec_net.infer(inputs={exp_inp_node_x_name: fprs})
 
         indices = preds[indices_blob][0]
         values = preds[values_blob][0]
-        np.save('expansion_preds_ov.npy', [indices, values])
+        np.save('expansion_preds_ov', [indices, values])
 
-    exit()
+    # exit()
     # Generate children for reactants
     children = []
-    for mol, rule_idxs in zip(mols, preds.indices):
-        # State for children will
-        # not include this mol
+    # for mol, rule_idxs in zip(mols, preds.indices):
+    #     # State for children will
+    #     # not include this mol
 
-        # new_state = mols - [mol]
-        smol = set(mol)
-        new_state = [x for x in mols if x in smol]
+    #     # new_state = mols - [mol]
+    #     smol = set(mol)
+    #     new_state = [x for x in mols if x in smol]
 
-        mol = Chem.MolFromSmiles(mol)
-        for idx in rule_idxs:
-            # Extract actual rule
+    #     mol = Chem.MolFromSmiles(mol)
+    #     for idx in rule_idxs:
+    #         # Extract actual rule
 
-            rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(idx)]
+    #         rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(idx)]
 
-            # TODO filter_net should check if the reaction will work?
-            # should do as a batch
+    #         # TODO filter_net should check if the reaction will work?
+    #         # should do as a batch
 
-            # Apply rule
-            reactants = transform(mol, rule)
+    #         # Apply rule
+    #         reactants = transform(mol, rule)
 
-            if not reactants: continue
+    #         if not reactants: continue
 
-            state = new_state | set(reactants)
-            terminal = all(mol in starting_mols for mol in state)
-            child = Node(state=state, is_terminal=terminal, parent=node, action=rule)
-            children.append(child)
+    #         state = new_state | set(reactants)
+    #         terminal = all(mol in starting_mols for mol in state)
+    #         child = Node(state=state, is_terminal=terminal, parent=node, action=rule)
+    #         children.append(child)
     return children
 
 
@@ -182,21 +221,25 @@ def rollout(node, max_depth=200):
         mol = random.choice(mols)
         fprs = policies.fingerprint_mols([mol], rollout_net.X.shape[1])
 
-        # Predict applicable rules
-        preds = sess.run(rollout_net.pred_op, feed_dict={
-            rollout_net.keep_prob: 1.,
-            rollout_net.X: fprs,
-            # rollout_net.k: 1
-        })
+        if not args.use_openvino:
+            # Predict applicable rules
+            preds = sess.run(rollout_net.pred_op, feed_dict={
+                rollout_net.keep_prob: 1.,
+                rollout_net.X: fprs,
+            })
 
-        # input_blob = next(iter(net.inputs))
-        # out_blob = next(iter(net.outputs))
+            np.save('rollout_preds_tf', preds[0])
 
-        # opvn_preds = exec_net.infer(inputs={input_blob: fprs})
-        # opvn_preds = opvn_preds[out_blob]
+        else:
+            # Get output node name
+            output_blob = next(iter(roll_net.outputs))
 
-        # np.savetxt('rollout_preds_tf.cvs', preds, delimiter=' ')
-        # np.savetxt('rollout_preds_ov.cvs', opvn_preds, delimiter=' ')
+            # Predict applicable rules
+            preds = roll_exec_net.infer(inputs={roll_inp_node_name: fprs})
+
+            np.save('rollout_preds_ov', preds[output_blob][0])
+
+    exit()
 
     #     rule = rollout_rules[preds[0][0]]
     #     reactants = transform(Chem.MolFromSmiles(mol), rule)
