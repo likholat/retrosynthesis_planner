@@ -48,7 +48,6 @@ jobs:
         conda install python=3.6
         pip install tensorflow==1.15.2
         pip install test-generator
-        pip install onnx
         conda install -c rdkit rdkit=2018.09.1
         conda install -c conda-forge molvs
         conda install -c anaconda networkx

@@ -10,6 +10,7 @@ from rdkit.Chem import AllChem
 
 import numpy as np
 import argparse
+from tensorflow.python.ops import gen_nn_ops
 
 parser = argparse.ArgumentParser("Select model representation")
 parser.add_argument("--use_openvino", help="Enable OpenVINO optimization", action='store_true')
@@ -36,8 +37,8 @@ with open('model/rules.json', 'r') as f:
     rollout_rules = rules['rollout']
     expansion_rules = rules['expansion']
 
-rollout_net = policies.RolloutPolicyNet(n_rules=len(rollout_rules))
-expansion_net = policies.ExpansionPolicyNet(n_rules=len(expansion_rules))
+rollout_net = policies.RolloutPolicyNet(n_rules=len(rollout_rules), is_training=False)
+expansion_net = policies.ExpansionPolicyNet(n_rules=len(expansion_rules), is_training=False)
 filter_net = policies.InScopeFilterNet()
 
 sess = tf.Session()
@@ -52,6 +53,7 @@ if args.use_openvino:
     import mo_tf
     import os
 
+    from collections import namedtuple
     from openvino.inference_engine import IECore
     ie = IECore()
 
@@ -136,8 +138,11 @@ def transform(mol, rule):
     rxn = AllChem.ReactionFromSmarts(rule)
     results = rxn.RunReactants([mol])
 
+    if not results:
+        return []
+
     # Only look at first set of results (TODO any reason not to?)
-    results = results[0] if results else results
+    results = results[0]
     reactants = [Chem.MolToSmiles(smi) for smi in results]
     return reactants
 
@@ -173,12 +178,14 @@ def expansion(node):
 
         # Predict applicable rules
         preds = exp_exec_net.infer(inputs={exp_inp_node_x_name: fprs})
-
+        
         indices = preds[indices_blob][0]
         values = preds[values_blob][0]
         np.save('expansion_preds_ov', [indices, values])
 
-    # exit()
+        top_k = namedtuple('TopKV2', 'values indices')
+        preds = top_k([values], [indices])
+
     # Generate children for reactants
     children = []
     for mol, rule_idxs in zip(mols, preds.indices):
