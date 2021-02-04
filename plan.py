@@ -198,7 +198,6 @@ def expansion(node):
         mol = Chem.MolFromSmiles(mol)
         for idx in rule_idxs:
             # Extract actual rule
-
             rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(idx)]
 
             # TODO filter_net should check if the reaction will work?
@@ -242,10 +241,12 @@ def rollout(node, max_depth=200):
 
             # Predict applicable rules
             preds = roll_exec_net.infer(inputs={roll_inp_node_name: fprs})
+            preds = preds[output_blob]
 
-            np.save('rollout_preds_ov', preds[output_blob][0])
+            np.save('rollout_preds_ov', preds[0])
 
-        # rule = rollout_rules[preds[0][0]]
+            print('HELLOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO')
+
         rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(preds[0])]
         reactants = transform(Chem.MolFromSmiles(mol), rule)
         state = cur.state | set(reactants)
