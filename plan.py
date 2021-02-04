@@ -137,7 +137,7 @@ def transform(mol, rule):
     results = rxn.RunReactants([mol])
 
     # Only look at first set of results (TODO any reason not to?)
-    # results = results[0]
+    results = results[0] if results else results
     reactants = [Chem.MolToSmiles(smi) for smi in results]
     return reactants
 
@@ -181,32 +181,31 @@ def expansion(node):
     # exit()
     # Generate children for reactants
     children = []
-    # for mol, rule_idxs in zip(mols, preds.indices):
-    #     # State for children will
-    #     # not include this mol
+    for mol, rule_idxs in zip(mols, preds.indices):
+        # State for children will
+        # not include this mol
 
-    #     # new_state = mols - [mol]
-    #     smol = set(mol)
-    #     new_state = [x for x in mols if x in smol]
+        smol = set(mol)
+        new_state = [x for x in mols if x in smol]
 
-    #     mol = Chem.MolFromSmiles(mol)
-    #     for idx in rule_idxs:
-    #         # Extract actual rule
+        mol = Chem.MolFromSmiles(mol)
+        for idx in rule_idxs:
+            # Extract actual rule
 
-    #         rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(idx)]
+            rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(idx)]
 
-    #         # TODO filter_net should check if the reaction will work?
-    #         # should do as a batch
+            # TODO filter_net should check if the reaction will work?
+            # should do as a batch
 
-    #         # Apply rule
-    #         reactants = transform(mol, rule)
+            # Apply rule
+            reactants = transform(mol, rule)
 
-    #         if not reactants: continue
+            if not reactants: continue
 
-    #         state = new_state | set(reactants)
-    #         terminal = all(mol in starting_mols for mol in state)
-    #         child = Node(state=state, is_terminal=terminal, parent=node, action=rule)
-    #         children.append(child)
+            state = new_state | set(reactants)
+            terminal = all(mol in starting_mols for mol in state)
+            child = Node(state=state, is_terminal=terminal, parent=node, action=rule)
+            children.append(child)
     return children
 
 
@@ -239,31 +238,30 @@ def rollout(node, max_depth=200):
 
             np.save('rollout_preds_ov', preds[output_blob][0])
 
-    exit()
+        # rule = rollout_rules[preds[0][0]]
+        rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(preds[0])]
+        reactants = transform(Chem.MolFromSmiles(mol), rule)
+        state = cur.state | set(reactants)
 
-    #     rule = rollout_rules[preds[0][0]]
-    #     reactants = transform(Chem.MolFromSmiles(mol), rule)
-    #     state = cur.state | set(reactants)
+        # State for children will
+        # not include this mol
+        state = state - {mol}
 
-    #     # State for children will
-    #     # not include this mol
-    #     state = state - {mol}
+        terminal = all(mol in starting_mols for mol in state)
+        cur = Node(state=state, is_terminal=terminal, parent=cur, action=rule)
 
-    #     terminal = all(mol in starting_mols for mol in state)
-    #     cur = Node(state=state, is_terminal=terminal, parent=cur, action=rule)
+    # Max depth exceeded
+    else:
+        print('Rollout reached max depth')
 
-    # # Max depth exceeded
-    # else:
-    #     print('Rollout reached max depth')
+        # Partial reward if some starting molecules are found
+        reward = sum(1 for mol in cur.state if mol in starting_mols)/len(cur.state)
 
-    #     # Partial reward if some starting molecules are found
-    #     reward = sum(1 for mol in cur.state if mol in starting_mols)/len(cur.state)
+        # Reward of -1 if no starting molecules are found
+        if reward == 0:
+            return -1.
 
-    #     # Reward of -1 if no starting molecules are found
-    #     if reward == 0:
-    #         return -1.
-
-    #     return reward
+        return reward
 
     # Reward of 1 if solution is found
     return 1.

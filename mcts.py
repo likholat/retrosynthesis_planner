@@ -37,6 +37,8 @@ def mcts(root, expansion_policy, rollout_policy, iterations=2000, max_depth=200)
     """
     root.children = expansion_policy(root)
 
+    exit()
+
     # MCTS
     for _ in tqdm(range(iterations)):
         cur_node = root
