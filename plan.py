@@ -25,7 +25,7 @@ with open('data/emolecules.smi', 'r') as f:
             smi = molvs.standardize_smiles(smi)
             starting_mols.add(smi)
 
-            if len(starting_mols) == 10:
+            if len(starting_mols) == 1:
                 break
         except Exception as e:
             print('WARNING', e)
@@ -47,6 +47,10 @@ sess.run(init)
 saver = tf.train.Saver()
 saver.restore(sess, 'model/model.ckpt')
 
+# Results for tests
+exp_res = [[],[]]
+rollout_res = []
+
 if args.use_openvino:
     import subprocess
     import sys
@@ -66,19 +70,15 @@ if args.use_openvino:
     model_xml = 'model.xml'
     model_bin = 'model.bin'
 
-    # EXPANSION_NET:
-    # Save frozen graph
+    # EXPANSION_NET
     input_node_names = [exp_inp_node_x_name, exp_inp_node_k_name]
     output_node_names = ['TopKV2']
 
+    # Save frozen graph
     graph_def = tf.graph_util.convert_variables_to_constants(
             sess,
             sess.graph_def,
             output_node_names)
-
-    from tensorflow.python.tools import optimize_for_inference_lib
-    graph_def = optimize_for_inference_lib.optimize_for_inference(
-            graph_def, input_node_names, output_node_names, tf.float32.as_datatype_enum)
 
     with tf.io.gfile.GFile(pb_model_path, 'wb') as f:
         f.write(graph_def.SerializeToString())
@@ -100,19 +100,14 @@ if args.use_openvino:
     os.remove(model_bin)
 
 
-    #ROLLOUT_NET:
-    # Save frozen graph
-    input_node_names = [roll_inp_node_name]
+    # ROLLOUT_NET
     output_node_names = ['ArgMax']
     
+    # Save frozen graph
     graph_def = tf.graph_util.convert_variables_to_constants(
             sess,
             sess.graph_def,
             output_node_names)
-
-    from tensorflow.python.tools import optimize_for_inference_lib
-    graph_def = optimize_for_inference_lib.optimize_for_inference(
-            graph_def, input_node_names, output_node_names, tf.float32.as_datatype_enum)
 
     with tf.io.gfile.GFile(pb_model_path, 'wb') as f:
         f.write(graph_def.SerializeToString())
@@ -121,12 +116,12 @@ if args.use_openvino:
     subprocess.run(
         [
             sys.executable, mo_tf.__file__, '--input_model', pb_model_path,
-            '--input', ','.join(input_node_names), '--input_shape', "[1, 8912]",
+            '--input_shape', "[1, 8912]",
         ],
         check=True)
 
-    roll_net = ie.read_network(model=model_xml, weights=model_bin)
-    roll_exec_net = ie.load_network(network=roll_net, device_name='CPU')
+    roll_net = ie.read_network(model_xml, model_bin)
+    roll_exec_net = ie.load_network(roll_net, 'CPU')
 
     os.remove(pb_model_path)
     os.remove(model_xml)
@@ -162,14 +157,15 @@ def expansion(node):
     if not args.use_openvino:
         # Predict applicable rules
         preds = sess.run(expansion_net.pred, feed_dict={
-            expansion_net.keep_prob: 1.,
             expansion_net.X: fprs,
             expansion_net.k: 5
         })
 
-        indices = preds.indices[0]
-        values = preds.values[0]
-        np.save('expansion_preds_tf', [indices, values])
+        # indices = preds.indices[0]
+        # values = preds.values[0]
+
+        exp_res[0].append(preds.indices[0])
+        exp_res[1].append(preds.values[0])
 
     else:
         # Get output nodes names
@@ -181,7 +177,9 @@ def expansion(node):
         
         indices = preds[indices_blob][0]
         values = preds[values_blob][0]
-        np.save('expansion_preds_ov', [indices, values])
+
+        exp_res[0].append(indices)
+        exp_res[1].append(values)
 
         top_k = namedtuple('TopKV2', 'values indices')
         preds = top_k([values], [indices])
@@ -198,7 +196,7 @@ def expansion(node):
         mol = Chem.MolFromSmiles(mol)
         for idx in rule_idxs:
             # Extract actual rule
-            rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(idx)]
+            rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(idx)]  
 
             # TODO filter_net should check if the reaction will work?
             # should do as a batch
@@ -229,23 +227,17 @@ def rollout(node, max_depth=200):
         if not args.use_openvino:
             # Predict applicable rules
             preds = sess.run(rollout_net.pred_op, feed_dict={
-                rollout_net.keep_prob: 1.,
                 rollout_net.X: fprs,
             })
 
-            np.save('rollout_preds_tf', preds[0])
+            rollout_res.append(preds[0])
 
         else:
-            # Get output node name
-            output_blob = next(iter(roll_net.outputs))
-
             # Predict applicable rules
             preds = roll_exec_net.infer(inputs={roll_inp_node_name: fprs})
-            preds = preds[output_blob]
+            preds = next(iter(preds.values()))
 
-            np.save('rollout_preds_ov', preds[0])
-
-            print('HELLOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO')
+            rollout_res.append(preds[0])
 
         rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(preds[0])]
         reactants = transform(Chem.MolFromSmiles(mol), rule)
@@ -295,4 +287,12 @@ if __name__ == '__main__':
     target_mol = 'CC(=O)NC1=CC=C(O)C=C1'
     root = Node(state={target_mol})
     path = plan(target_mol)
-    import ipdb; ipdb.set_trace()
+
+    if not args.use_openvino:
+        np.save('expansion_preds_tf', exp_res)
+        np.save('rollout_preds_tf', rollout_res)
+    else:
+        np.save('expansion_preds_ov', exp_res)
+        np.save('rollout_preds_ov', rollout_res)
+
+    # import ipdb; ipdb.set_trace()

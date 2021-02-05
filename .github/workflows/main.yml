@@ -48,6 +48,7 @@ jobs:
         conda install python=3.6
         pip install tensorflow==1.15.2
         pip install test-generator
+        pip install ipdb
         conda install -c rdkit rdkit=2018.09.1
         conda install -c conda-forge molvs
         conda install -c anaconda networkx
@@ -66,4 +67,4 @@ jobs:
       run: python -c 'import numpy as np; tf_res = np.load("expansion_preds_tf.npy"); ov_res = np.load("expansion_preds_ov.npy"); diff = np.max(np.abs(tf_res - ov_res)); assert diff < 1e-5, "Maximal difference more than 1e-5"'
 
     - name: Check Rollout net results
-      run: python -c 'import numpy as np; tf_res = np.load("rollout_preds_tf.npy"); ov_res = np.load("rollout_preds_ov.npy"); diff = tf_res - ov_res; assert diff < 1e-5, "Maximal difference more than 1e-5"'
+      run: python -c 'import numpy as np; tf_res = np.load("rollout_preds_tf.npy"); ov_res = np.load("rollout_preds_ov.npy"); diff = np.max(np.abs(tf_res - ov_res)); assert diff < 1e-5, "Maximal difference more than 1e-5"'

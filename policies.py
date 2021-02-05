@@ -104,7 +104,6 @@ class RolloutPolicyNet:
         self.n_rules = n_rules
         self.X = tf.placeholder(tf.float32, shape=(None, fp_dim), name='X')
         self.y = tf.placeholder(tf.int64, shape=(None,), name='y')
-        self.keep_prob = keep_prob
 
         inp = tf.math.log(self.X+1)
         net = tf.layers.dense(inp, 512, activation=tf.nn.elu)
@@ -135,7 +134,6 @@ class ExpansionPolicyNet:
         self.X = tf.placeholder(tf.float32, shape=(None, fp_dim))
         self.y = tf.placeholder(tf.int64, shape=(None,))
         self.k = tf.placeholder(tf.int32, shape=())
-        self.keep_prob = keep_prob
 
         # inp = self.X
         inp = tf.math.log(self.X+1)

@@ -57,9 +57,9 @@ def mcts(root, expansion_policy, rollout_policy, iterations=2000, max_depth=200)
             # Expansion
             s = time()
             cur_node.children = expansion_policy(cur_node)
-            exit()
             print('Expansion took:', time() - s)
-            cur_node = cur_node.best_child()
+            if cur_node.children:
+                cur_node = cur_node.best_child()
 
         # Rollout
         s = time()
@@ -79,8 +79,9 @@ def mcts(root, expansion_policy, rollout_policy, iterations=2000, max_depth=200)
     cur_node = root
     path = [cur_node]
     for _ in range(max_depth):
-        cur_node = cur_node.best_child()
-        path.append(cur_node)
+        if cur_node.children:
+            cur_node = cur_node.best_child()
+            path.append(cur_node)
         if cur_node.is_terminal:
             break
 
