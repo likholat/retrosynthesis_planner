@@ -36,6 +36,7 @@ with open('model/rules.json', 'r') as f:
     rules = json.load(f)
     rollout_rules = rules['rollout']
     expansion_rules = rules['expansion']
+    expansion_rules = {idx: rule for rule, idx in expansion_rules.items()}
 
 rollout_net = policies.RolloutPolicyNet(n_rules=len(rollout_rules), is_training=False)
 expansion_net = policies.ExpansionPolicyNet(n_rules=len(expansion_rules), is_training=False)
@@ -196,7 +197,7 @@ def expansion(node):
         mol = Chem.MolFromSmiles(mol)
         for idx in rule_idxs:
             # Extract actual rule
-            rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(idx)]  
+            rule = expansion_rules[idx]
 
             # TODO filter_net should check if the reaction will work?
             # should do as a batch
@@ -239,7 +240,7 @@ def rollout(node, max_depth=200):
 
             rollout_res.append(preds[0])
 
-        rule = list(expansion_rules.keys())[list(expansion_rules.values()).index(preds[0])]
+        rule = expansion_rules[preds[0]]
         reactants = transform(Chem.MolFromSmiles(mol), rule)
         state = cur.state | set(reactants)
 
