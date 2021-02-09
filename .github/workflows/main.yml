@@ -1,0 +1,70 @@
+name: CI
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-18.04
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+    - uses: s-weigand/setup-conda@v1
+
+    - name: Download data
+      run: |
+        sudo apt-get install -y megatools
+        mkdir data model
+        megadl 'https://mega.nz/#!ZBMGCDAA!5CL7FSaTTM9HnIaLIPHgfDY06iAWzt6X_fQ8w3eUBSk' --path data --no-progress
+        megadl 'https://mega.nz/#!YcU2yZyI!lpQ56SI9u0xJO6W1GPY0vZrXq5ymMbTJ3sBxtt6GM9w' --path model --no-progress
+        tar -xf data/data.tar.gz -C data
+        tar -xf model/model.tar.gz -C model
+
+    - name: Get OpenVINO with custom MO (enable TensorFlow Log() node)
+      run: |
+        git clone https://github.com/openvinotoolkit/openvino.git
+
+    - name: Install Intel OpenVINO
+      run: |
+        sudo curl -o GPG-PUB-KEY-INTEL-OPENVINO-2021 https://apt.repos.intel.com/openvino/2021/GPG-PUB-KEY-INTEL-OPENVINO-2021
+        sudo apt-key add GPG-PUB-KEY-INTEL-OPENVINO-2021
+        sudo echo "deb https://apt.repos.intel.com/openvino/2021 all main" | sudo tee - a /etc/apt/sources.list.d/intel-openvino-2021.list
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends intel-openvino-dev-ubuntu18-2021.1.110
+        sudo ln -s /opt/intel/openvino_2021 /opt/intel/openvino
+
+    - name: Install dependencies
+      run: |
+        conda install python=3.6
+        pip install tensorflow==1.15.2
+        pip install test-generator
+        pip install ipdb
+        conda install -c rdkit rdkit=2018.09.1
+        conda install -c conda-forge molvs
+        conda install -c anaconda networkx
+        conda install -c anaconda defusedxml
+
+    - name: Run OpenVINO model
+      run: |
+        source /opt/intel/openvino/bin/setupvars.sh
+        export PYTHONPATH=./openvino/model-optimizer:$PYTHONPATH
+        python plan.py --use_openvino
+      
+    - name: Run TensorFlow model
+      run: python plan.py
+
+    - name: Check Expansion net results
+      run: python -c 'import numpy as np; tf_res = np.load("expansion_preds_tf.npy"); ov_res = np.load("expansion_preds_ov.npy"); diff = np.max(np.abs(tf_res - ov_res)); assert diff < 1e-5, "Maximal difference more than 1e-5"'
+
+    - name: Check Rollout net results
+      run: python -c 'import numpy as np; tf_res = np.load("rollout_preds_tf.npy"); ov_res = np.load("rollout_preds_ov.npy"); diff = np.max(np.abs(tf_res - ov_res)); assert diff < 1e-5, "Maximal difference more than 1e-5"'

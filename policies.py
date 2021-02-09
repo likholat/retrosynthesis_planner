@@ -99,7 +99,7 @@ def train(sess, net, X, y, ckpt_path, logname, batch_size=16, epochs=10):
 
 
 class RolloutPolicyNet:
-    def __init__(self, n_rules, fp_dim=8912, k=10):
+    def __init__(self, n_rules, fp_dim=8912, k=10, is_training=True):
         self.fp_dim = fp_dim
         self.n_rules = n_rules
         self.X = tf.placeholder(tf.float32, shape=(None, fp_dim), name='X')
@@ -107,7 +107,8 @@ class RolloutPolicyNet:
 
         inp = tf.math.log(self.X+1)
         net = tf.layers.dense(inp, 512, activation=tf.nn.elu)
-        net = tf.nn.dropout(net, keep_prob=keep_prob)
+        if is_training:
+            net = tf.nn.dropout(net, keep_prob=keep_prob)
         net = tf.layers.dense(net, n_rules, activation=None)
         self.pred_op = tf.argmax(tf.nn.softmax(net), 1)
         self.loss_op = tf.losses.sparse_softmax_cross_entropy(self.y, net)
@@ -126,7 +127,7 @@ class RolloutPolicyNet:
 
 
 class ExpansionPolicyNet:
-    def __init__(self, n_rules, fp_dim=1e4):
+    def __init__(self, n_rules, fp_dim=1e4, is_training=True):
         self.fp_dim = fp_dim
         self.n_rules = n_rules
 
@@ -137,10 +138,12 @@ class ExpansionPolicyNet:
         # inp = self.X
         inp = tf.math.log(self.X+1)
         net = tf.layers.dense(inp, 512, activation=tf.nn.elu)
-        net = tf.nn.dropout(net, keep_prob=keep_prob)
+        if is_training:
+            net = tf.nn.dropout(net, keep_prob=keep_prob)
         for _ in range(5):
             net = highway_layer(net, activation=tf.nn.elu)
-            net = tf.nn.dropout(net, keep_prob=keep_prob)
+            if is_training:
+                net = tf.nn.dropout(net, keep_prob=keep_prob)
 
         net = tf.layers.dense(net, n_rules, activation=None)
         pred = tf.nn.softmax(net)

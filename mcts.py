@@ -27,7 +27,7 @@ class Node:
         return max(self.children, key=lambda n: n.value)
 
 
-def mcts(root, expansion_policy, rollout_policy, iterations=2000, max_depth=200):
+def mcts(root, expansion_policy, rollout_policy, iterations=2000, max_depth=200, use_openvino=False):
     """
     Monte Carlo Tree Search
     - `expansion_policy` should be a function that takes a node and returns a
@@ -35,7 +35,7 @@ def mcts(root, expansion_policy, rollout_policy, iterations=2000, max_depth=200)
     - `rollout_policy` should be a function that takes a node and returns a
     reward for that node
     """
-    root.children = expansion_policy(root)
+    root.children = expansion_policy(root, use_openvino=use_openvino)
 
     # MCTS
     for _ in tqdm(range(iterations)):
@@ -56,13 +56,14 @@ def mcts(root, expansion_policy, rollout_policy, iterations=2000, max_depth=200)
 
             # Expansion
             s = time()
-            cur_node.children = expansion_policy(cur_node)
+            cur_node.children = expansion_policy(cur_node, use_openvino=use_openvino)
             print('Expansion took:', time() - s)
-            cur_node = cur_node.best_child()
+            if cur_node.children:
+                cur_node = cur_node.best_child()
 
         # Rollout
         s = time()
-        reward = rollout_policy(cur_node, max_depth=max_depth)
+        reward = rollout_policy(cur_node, max_depth=max_depth, use_openvino=use_openvino)
         print('Rollout took:', time() - s)
 
         # Update
@@ -78,8 +79,9 @@ def mcts(root, expansion_policy, rollout_policy, iterations=2000, max_depth=200)
     cur_node = root
     path = [cur_node]
     for _ in range(max_depth):
-        cur_node = cur_node.best_child()
-        path.append(cur_node)
+        if cur_node.children:
+            cur_node = cur_node.best_child()
+            path.append(cur_node)
         if cur_node.is_terminal:
             break
 
