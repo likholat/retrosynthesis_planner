@@ -12,6 +12,9 @@ import numpy as np
 import argparse
 from collections import namedtuple
 
+import time
+
+start = time.time()
 # Load base compounds
 starting_mols = set()
 with open('data/emolecules.smi', 'r') as f:
@@ -24,7 +27,12 @@ with open('data/emolecules.smi', 'r') as f:
             if len(starting_mols) == 10:
                 break
         except Exception as e:
+            # pass
             print('WARNING', e)
+end = time.time()
+print('TIME:')
+print(end - start)
+# exit()
 print('Base compounds:', len(starting_mols))
 
 # Load policy networks
@@ -197,21 +205,6 @@ def rollout(node, max_depth=200, use_openvino=False):
     return 1.
 
 
-def plan(target_mol, use_openvino=False):
-    """Generate a synthesis plan for a target molecule (in SMILES form).
-    If a path is found, returns a list of (action, state) tuples.
-    If a path is not found, returns None."""
-    root = Node(state={target_mol})
-
-    path = mcts(root, expansion, rollout, iterations=2000, max_depth=200, use_openvino=use_openvino)
-    if path is None:
-        print('No synthesis path found. Try increasing `iterations` or `max_depth`.')
-    else:
-        print('Path found:')
-        path = [(n.action, n.state) for n in path[1:]]
-    return path
-
-
 def convert_to_ir(sess, input_shape, output_node_names, input_node_names=None, placeholder_value=None):
     import subprocess
     import sys
@@ -253,7 +246,7 @@ def convert_to_ir(sess, input_shape, output_node_names, input_node_names=None, p
         convert_script.append('--freeze_placeholder_with_value'),
         convert_script.append(placeholder_value)
 
-    # Convert to OpenVINO IR
+    # Convert to Openvino IR
     subprocess.run(convert_script, check=True)
 
     net = ie.read_network(model=model_xml, weights=model_bin)
@@ -266,12 +259,16 @@ def convert_to_ir(sess, input_shape, output_node_names, input_node_names=None, p
     return net, exec_net
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser("Select model representation")
-    parser.add_argument("--use_openvino", help="Enable OpenVINO optimization", action='store_true')
-    args = parser.parse_args()
+def plan(target_mol, use_openvino=False):
+    """Generate a synthesis plan for a target molecule (in SMILES form).
+    If a path is found, returns a list of (action, state) tuples.
+    If a path is not found, returns None."""
+    root = Node(state={target_mol})
 
-    if args.use_openvino:
+    if use_openvino:
+        global exp_net, exp_exec_net, roll_exec_net
+        global exp_inp_node_x_name, exp_inp_node_k_name, roll_inp_node_name
+
         # Get input nodes names
         exp_inp_node_x_name = expansion_net.X.name.split(':')[0]
         exp_inp_node_k_name = expansion_net.k.name.split(':')[0]
@@ -281,8 +278,23 @@ if __name__ == '__main__':
         exp_output_nodes = ['TopKV2']
         roll_output_nodes = ['ArgMax']
 
+        # Get Openvino networks
         exp_net, exp_exec_net = convert_to_ir(sess, [exp_net_x_shape, 0], exp_output_nodes, exp_input_nodes, "Placeholder_2->5")
         _, roll_exec_net = convert_to_ir(sess, [roll_net_x_shape], roll_output_nodes)
+
+    path = mcts(root, expansion, rollout, iterations=2000, max_depth=200, use_openvino=use_openvino)
+    if path is None:
+        print('No synthesis path found. Try increasing `iterations` or `max_depth`.')
+    else:
+        print('Path found:')
+        path = [(n.action, n.state) for n in path[1:]]
+    return path
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser("Select model representation")
+    parser.add_argument("--use_openvino", help="Enable OpenVINO optimization", action='store_true')
+    args = parser.parse_args()
 
     # target_mol = '[H][C@@]12OC3=C(O)C=CC4=C3[C@@]11CCN(C)[C@]([H])(C4)[C@]1([H])C=C[C@@H]2O'
     target_mol = 'CC(=O)NC1=CC=C(O)C=C1'
